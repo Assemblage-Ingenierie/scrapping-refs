@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "FastAPI server (uvicorn)",
-      "runtimeExecutable": "uvicorn",
-      "runtimeArgs": ["server:app", "--port", "8000", "--reload"],
+      "runtimeExecutable": "C:\\Users\\amaur\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "server:app", "--port", "8000", "--reload"],
       "port": 8000
     }
   ]

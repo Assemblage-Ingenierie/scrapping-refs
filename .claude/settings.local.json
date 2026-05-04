@@ -37,7 +37,26 @@
       "Bash(curl -s \"http://localhost:8000/api/llm/status\")",
       "Bash(python -m json.tool)",
       "PowerShell(Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; Write-Host \"Killed PID $_\" })",
-      "Bash(python -m unittest tests.test_parsing)"
+      "Bash(python -m unittest tests.test_parsing)",
+      "PowerShell(Get-Command py -ErrorAction SilentlyContinue)",
+      "Bash(where python *)",
+      "Bash(where python3 *)",
+      "Read(//c/Users/amaur/AppData/Local/Programs/**)",
+      "Bash(ls /c/Python*/python.exe)",
+      "Read(//c/Users/amaur/miniconda3/**)",
+      "Read(//c/ProgramData/miniconda3/**)",
+      "Read(//c/Users/amaur/.conda/**)",
+      "Read(//c//**)",
+      "Read(//c/Users/amaur/**)",
+      "Read(//d/github/scrapping-refs//**)",
+      "Read(//d/github/scrapping-refs/**)",
+      "Read(//d/github/scrapping-refs/.venv/**)",
+      "Read(//d/github/scrapping-refs/venv/**)",
+      "PowerShell($env:PATH -split ';' | Where-Object { $_ -ne '' })",
+      "Bash(\"C:/Users/amaur/AppData/Local/Python/pythoncore-3.14-64/python.exe\" -m pip install -r requirements.txt)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); agences=d.get\\('agencies',[]\\); print\\(f'{len\\(agences\\)} agences'\\); [print\\(' -', a['name'], '|', a.get\\('url','\\(pas d URL\\)'\\)\\) for a in agences[:10]]\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

@@ -2214,7 +2214,7 @@ async def get_agencies():
         while True:
             params = {
                 "pageSize": 100,
-                "filterByFormula": "{Type}='Architecte'",
+                "filterByFormula": "FIND('Architecte',{Compétences})",
             }
             if offset:
                 params["offset"] = offset
