@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="fr" x-data="app()" x-init="init()">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Références projets — Assemblage ingénierie</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Open Sans', 'sans-serif'] },
+          colors: {
+            'ai-rouge':       '#E30513',
+            'ai-violet':      '#30323E',
+            'ai-gris':        '#DFE4E8',
+            'ai-rouge-clair': '#F9E1E3',
+            'ai-gris-cl':     '#F2F2F2',
+            'ai-noir70':      '#4D4D4D',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    [x-cloak] { display: none !important; }
+    body { font-family: 'Open Sans', sans-serif; }
+
+    .input-cell {
+      width: 100%; background: transparent; border: 0;
+      border-bottom: 1px solid transparent;
+      padding: 0.25rem 0.5rem; font-size: 0.875rem; color: #000;
+      transition: border-color 0.15s;
+    }
+    .input-cell:focus { outline: none; border-bottom-color: #E30513; }
+    tr:hover .input-cell, tr:hover .select-cell { border-bottom-color: #DFE4E8; }
+    textarea.input-cell { resize: none; line-height: 1.35; }
+    .select-cell {
+      width: 100%; background: transparent; border: 0;
+      border-bottom: 1px solid transparent;
+      padding: 0.25rem 0.5rem; font-size: 0.875rem; color: #000; cursor: pointer;
+    }
+    .select-cell:focus { outline: none; border-bottom-color: #E30513; }
+
+    .log-line { font-size: 0.75rem; font-family: 'Courier New', monospace; }
+
+    .step-dot {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700;
+      border: 2px solid; transition: all 0.3s;
+    }
+
+    thead th { position: sticky; top: 0; z-index: 10; background: #F2F2F2; }
+    .col-sticky { position: sticky; background: white; z-index: 5; }
+    .validation-table { table-layout: fixed; }
+    .validation-table th {
+      resize: horizontal;
+      overflow: auto;
+      min-width: 72px;
+    }
+    .truncate-table .input-cell,
+    .truncate-table .select-cell {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      height: 2rem;
+    }
+    .wrap-table .input-cell,
+    .wrap-table .select-cell {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      min-height: 2.75rem;
+    }
+    .resize-handle {
+      position: absolute; top: 0; right: 0; width: 7px; height: 100%;
+      cursor: col-resize; user-select: none;
+    }
+    .resize-handle:hover { background: rgba(227,5,19,0.16); }
+
+    /* Sidebar nav */
+    .nav-link {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.875rem 1.25rem; color: rgba(255,255,255,0.7);
+      font-size: 0.875rem; cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: all 0.15s;
+    }
+    .nav-link:hover { color: #fff; background: rgba(255,255,255,0.05); }
+    .nav-link.active {
+      color: #fff; font-weight: 600;
+      border-left-color: #E30513;
+      background: rgba(227,5,19,0.08);
+    }
+
+    /* Sigle .A en watermark */
+    .ai-watermark {
+      position: fixed; bottom: 16px; right: 24px;
+      font-family: 'Open Sans', sans-serif; font-weight: 700;
+      font-size: 18px; color: #E30513; opacity: 0.20;
+      pointer-events: none; letter-spacing: -1px;
+    }
+  </style>
+</head>
+<body class="bg-ai-gris-cl min-h-screen text-black" x-cloak>
+
+<!-- ═══ HEADER ═══ -->
+<header class="bg-ai-gris-cl border-b border-ai-gris h-[72px] flex items-center px-6 gap-6">
+  <!-- Logo + titre -->
+  <div class="flex items-center gap-4">
+    <img src="https://hhkofvbptnrtwbazftlm.supabase.co/storage/v1/object/public/Branding/logo/logo_Ai_rouge.svg"
+         alt="Assemblage ingénierie" class="h-9 w-auto">
+    <div class="w-px h-8 bg-ai-gris"></div>
+    <h1 class="text-ai-violet font-semibold text-lg">Références projets</h1>
+  </div>
+
+  <!-- Step indicator -->
+  <div class="flex items-center gap-2 mx-auto">
+    <template x-for="(label, i) in ['Saisie', 'Scraping', 'Validation', 'Upload']" :key="i">
+      <div class="flex items-center gap-2">
+        <div class="step-dot"
+             :style="step === i+1
+               ? 'background:#E30513; border-color:#E30513; color:#fff;'
+               : step > i+1
+                 ? 'background:#30323E; border-color:#30323E; color:#fff;'
+                 : 'background:#fff; border-color:#DFE4E8; color:#4D4D4D;'">
+          <span x-show="step <= i+1" x-text="i+1"></span>
+          <svg x-show="step > i+1" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+          </svg>
+        </div>
+        <span class="text-xs font-semibold"
+              :style="step === i+1 ? 'color:#E30513' : step > i+1 ? 'color:#30323E' : 'color:#4D4D4D'"
+              x-text="label"></span>
+        <div x-show="i < 3" class="w-6 h-px bg-ai-gris"></div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Status + Reset -->
+  <div class="flex items-center gap-4">
+    <div class="text-xs text-right text-ai-noir70">
+      <template x-if="atLoading">
+        <span>Chargement…</span>
+      </template>
+      <template x-if="!atLoading && atError">
+        <span style="color:#E30513;" x-text="'⚠ ' + atError"></span>
+      </template>
+      <template x-if="!atLoading && !atError">
+        <span><span class="font-semibold text-ai-violet" x-text="atRecords.length"></span> fiches</span>
+      </template>
+    </div>
+    <button @click="resetApp()" x-show="step !== 1"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold
+                   border border-ai-gris bg-white text-ai-violet
+                   hover:bg-ai-rouge-clair hover:border-ai-rouge hover:text-ai-rouge
+                   transition-colors rounded">
+      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+      Réinitialiser
+    </button>
+  </div>
+</header>
+
+<!-- ═══ MAIN LAYOUT (sidebar + content) ═══ -->
+<div class="flex min-h-[calc(100vh-72px)]">
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <aside class="w-[260px] bg-ai-violet flex flex-col flex-shrink-0">
+    <div class="px-5 py-4 border-b border-white/10">
+      <p class="text-white/50 text-xs uppercase tracking-wide font-semibold">Navigation</p>
+    </div>
+
+    <nav class="py-2">
+      <div class="nav-link" :class="step === 1 && 'active'" @click="step === 1 || resetApp()">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+        </svg>
+        Nouvelle agence
+      </div>
+      <div class="nav-link" :class="step === 3 && 'active'" :style="projects.length === 0 ? 'opacity:0.3; cursor:not-allowed' : ''"
+           @click="projects.length > 0 && (step = 3)">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+        </svg>
+        Validation
+        <span x-show="projects.length > 0" class="ml-auto bg-white/10 text-white/80 text-xs px-2 py-0.5 rounded-full"
+              x-text="projects.length"></span>
+      </div>
+    </nav>
+
+    <!-- Recently scraped -->
+    <div x-show="atRecords.length > 0" class="mt-4 px-5">
+      <p class="text-white/50 text-xs uppercase tracking-wide font-semibold mb-2">En base</p>
+      <div class="space-y-1 max-h-72 overflow-y-auto">
+        <template x-for="ag in agencyStats" :key="ag.name">
+          <div class="text-xs text-white/70 py-1 flex items-center justify-between">
+            <span class="truncate" x-text="ag.name"></span>
+            <span class="text-white/40 ml-2" x-text="ag.count"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div class="mt-auto px-5 py-4 border-t border-white/10">
+      <img src="https://hhkofvbptnrtwbazftlm.supabase.co/storage/v1/object/public/Branding/logo/sigle_Ai.svg"
+           alt=".A" class="h-6 w-auto opacity-40">
+    </div>
+  </aside>
+
+  <!-- ═══ ZONE CONTENU ═══ -->
+  <main class="flex-1 bg-white p-8 overflow-x-auto">
+
+<!-- ═══════════════ ÉTAPE 1 — SAISIE ═══════════════ -->
+<section x-show="step === 1" x-transition class="w-full max-w-[92rem] mx-auto">
+  <h2 class="text-3xl font-bold text-black mb-1">Nouvelle agence</h2>
+  <p class="text-ai-noir70 mb-8 text-sm">Collez l'URL de la page listant les projets.</p>
+
+  <div class="bg-white border border-ai-gris rounded-lg p-8 space-y-6">
+
+    <!-- Agences connues (depuis Airtable) -->
+    <div x-show="knownAgencies.length > 0">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-sm font-semibold text-ai-violet">
+          Agences connues
+          <span class="text-ai-noir70 text-xs font-normal" x-text="'(' + filteredAgencies.length + ' / ' + knownAgencies.length + ')'"></span>
+        </p>
+        <input x-model="agencySearch" type="text" placeholder="Rechercher…"
+               class="w-48 px-3 py-1 text-xs border border-ai-gris rounded
+                      focus:outline-none focus:border-ai-rouge">
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
+        <template x-for="ag in filteredAgencies" :key="ag.id">
+          <button @click="selectAgency(ag)"
+                  :class="ag.has_url
+                    ? 'bg-white hover:bg-ai-rouge-clair hover:border-ai-rouge'
+                    : 'bg-ai-gris-cl text-ai-noir70 hover:bg-ai-gris'"
+                  class="text-left px-3 py-2 border border-ai-gris rounded text-sm
+                         transition-colors flex items-center justify-between gap-2">
+            <span class="truncate" x-text="ag.name"></span>
+            <span x-show="!ag.has_url" class="text-xs text-ai-noir70 flex-shrink-0">⚠</span>
+          </button>
+        </template>
+        <template x-if="filteredAgencies.length === 0">
+          <p class="col-span-2 text-xs text-ai-noir70 text-center py-4">Aucun résultat</p>
+        </template>
+      </div>
+      <p class="text-xs text-ai-noir70 mt-2">
+        ⚠ = pas d'URL « URL page projet » renseignée dans Airtable
+      </p>
+    </div>
+
+    <!-- Form -->
+    <div class="space-y-5 pt-2 border-t border-ai-gris">
+      <div>
+        <label class="block text-sm font-semibold text-ai-violet mb-1.5">Nom de l'agence *</label>
+        <input x-model="agency" @input="resetDiscoveryState()" type="text" placeholder="ex : Encore Heureux"
+               class="w-full border border-ai-gris rounded px-3 py-2 text-sm
+                      focus:outline-none focus:border-ai-rouge">
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-ai-violet mb-1.5">URL page projet *</label>
+        <input x-model="url" @input="resetDiscoveryState()" type="url" placeholder="https://agence.com/projets"
+               class="w-full border border-ai-gris rounded px-3 py-2 text-sm
+                      focus:outline-none focus:border-ai-rouge">
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold text-ai-violet mb-1.5">Projets max</label>
+          <input x-model.number="maxProjects" @input="resetDiscoveryState()" type="number" min="1" max="200"
+                 class="w-full border border-ai-gris rounded px-3 py-2 text-sm
+                        focus:outline-none focus:border-ai-rouge">
+        </div>
+        <div class="flex flex-col justify-end">
+          <label class="flex items-center gap-3 cursor-pointer">
+            <div class="relative">
+              <input type="checkbox" x-model="dynamic" @change="resetDiscoveryState()" class="sr-only peer">
+              <div class="w-10 h-5 bg-ai-gris peer-checked:bg-ai-rouge rounded-full transition-colors"></div>
+              <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow
+                          transition-transform peer-checked:translate-x-5"></div>
+            </div>
+            <span class="text-sm text-black">Site JavaScript (Playwright)</span>
+          </label>
+          <p class="text-xs text-ai-noir70 mt-1">Auto-détecté si non coché</p>
+        </div>
+      </div>
+
+      <!-- LLM toggle -->
+      <div class="pt-4 border-t border-ai-gris">
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex-1">
+            <label class="flex items-center gap-3 cursor-pointer"
+                   :class="!llmConfigured && 'opacity-50 cursor-not-allowed'">
+              <div class="relative">
+                <input type="checkbox" x-model="useLlm" @change="resetDiscoveryState()" :disabled="!llmConfigured" class="sr-only peer">
+                <div class="w-10 h-5 rounded-full transition-colors"
+                     :class="llmConfigured ? 'bg-ai-gris peer-checked:bg-ai-violet' : 'bg-ai-gris'"></div>
+                <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow
+                            transition-transform peer-checked:translate-x-5"></div>
+              </div>
+              <div>
+                <span class="text-sm font-semibold text-black">Extraction par LLM (Gemini)</span>
+                <p class="text-xs text-ai-noir70 mt-0.5">
+                  Fallback pour agences inconnues — génère un parser réutilisable
+                </p>
+              </div>
+            </label>
+          </div>
+          <!-- Status badge -->
+          <div class="flex-shrink-0 mt-0.5">
+            <template x-if="llmConfigured">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold
+                           bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                Gemini configuré
+              </span>
+            </template>
+            <template x-if="!llmConfigured">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold
+                           bg-ai-gris-cl text-ai-noir70 border border-ai-gris">
+                Clé manquante
+              </span>
+            </template>
+          </div>
+        </div>
+
+        <template x-if="llmConfigured && llmUsage">
+          <div class="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div class="border border-ai-gris rounded p-2">
+              <p class="text-ai-noir70">Modèle</p>
+              <p class="font-semibold text-ai-violet truncate" x-text="llmModel"></p>
+            </div>
+            <div class="border border-ai-gris rounded p-2">
+              <p class="text-ai-noir70">Appels jour</p>
+              <p class="font-semibold text-black">
+                <span x-text="llmUsage.attempts || 0"></span>
+                <span class="text-ai-noir70">/</span>
+                <span x-text="llmUsage.daily_limit || 500"></span>
+              </p>
+            </div>
+            <div class="border border-ai-gris rounded p-2">
+              <p class="text-ai-noir70">Succès / erreurs</p>
+              <p class="font-semibold text-black">
+                <span x-text="llmUsage.success || 0"></span>
+                <span class="text-ai-noir70">/</span>
+                <span x-text="llmUsage.errors || 0"></span>
+              </p>
+            </div>
+            <div class="border border-ai-gris rounded p-2">
+              <p class="text-ai-noir70">Reste estimé</p>
+              <p class="font-semibold" :class="(llmUsage.remaining_today || 0) <= 3 ? 'text-ai-rouge' : 'text-ai-violet'"
+                 x-text="(llmUsage.remaining_today ?? 0) + ' appels'"></p>
+            </div>
+            <div class="md:col-span-4 text-ai-noir70 flex flex-wrap gap-x-4 gap-y-1">
+              <span>Limites : <span x-text="llmUsage.rpm_limit || 5"></span> req/min · <span x-text="llmUsage.tpm_limit || 250000"></span> tokens/min</span>
+              <span x-show="llmUsage.last_status">Dernier statut : <strong x-text="llmUsage.last_status"></strong></span>
+              <span x-show="llmUsage.last_called_at">Dernier appel : <strong x-text="llmUsage.last_called_at"></strong></span>
+              <span x-show="llmUsage.last_error" class="text-ai-rouge truncate max-w-full" x-text="llmUsage.last_error"></span>
+            </div>
+          </div>
+        </template>
+
+        <!-- Saved parsers list -->
+        <template x-if="llmSavedParsers.length > 0">
+          <div class="mt-3 bg-ai-gris-cl rounded p-3">
+            <p class="text-xs font-semibold text-ai-violet mb-1.5">
+              Parsers sauvegardés (<span x-text="llmSavedParsers.length"></span>)
+            </p>
+            <div class="flex flex-wrap gap-1.5">
+              <template x-for="p in llmSavedParsers" :key="p.file">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-white border border-ai-gris rounded-full text-ai-violet">
+                  <span x-text="p.name"></span>
+                  <button @click="deleteParser(p.file)"
+                          class="text-ai-noir70 hover:text-ai-rouge font-bold"
+                          title="Supprimer ce parser">×</button>
+                </span>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="!llmConfigured">
+          <p class="mt-2 text-xs text-ai-noir70">
+            → Obtenez une clé gratuite sur
+            <strong>aistudio.google.com</strong> puis ajoutez
+            <code class="bg-ai-gris-cl px-1 rounded">GEMINI_API_KEY=…</code>
+            dans le fichier <code class="bg-ai-gris-cl px-1 rounded">.env</code>
+          </p>
+        </template>
+      </div>
+
+      <button @click="previewUrls()"
+              :disabled="!agency.trim() || !url.trim() || previewLoading"
+              class="w-full py-2 text-ai-violet font-semibold text-sm border border-ai-gris
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     hover:bg-ai-gris-cl transition-colors rounded">
+        <span x-text="previewLoading ? 'Prévisualisation…' : 'Prévisualiser les URLs détectées'"></span>
+      </button>
+
+      <div x-show="previewError" class="text-xs text-ai-rouge" x-text="previewError"></div>
+
+      <div x-show="previewUrlsList.length > 0" class="bg-ai-gris-cl border border-ai-gris rounded p-3">
+        <div class="flex items-center justify-between gap-3 mb-2">
+          <p class="text-xs font-semibold text-ai-violet">
+            <span x-text="previewUrlsList.length"></span>
+            URL(s) retenue(s)
+            <span x-show="previewTotal > previewUrlsList.length" x-text="'sur ' + previewTotal"></span>
+          </p>
+          <p class="text-xs text-ai-noir70">
+            URL exemple :
+            <span class="font-semibold text-ai-violet" x-text="selectedPreviewUrl ? 'sélectionnée' : 'aucune'"></span>
+          </p>
+        </div>
+        <div class="max-h-48 overflow-y-auto space-y-1">
+          <template x-for="u in previewUrlsList" :key="u">
+            <button type="button"
+                    @click="selectedPreviewUrl = u; resetMapping()"
+                    :class="selectedPreviewUrl === u ? 'border-ai-rouge bg-white text-black' : 'border-ai-gris bg-ai-gris-cl text-ai-noir70 hover:bg-white'"
+                    class="w-full text-left text-xs border rounded px-2.5 py-2 transition-colors">
+              <div class="flex items-start gap-2">
+                <div class="mt-0.5 w-3.5 h-3.5 rounded-full border flex-shrink-0"
+                     :class="selectedPreviewUrl === u ? 'border-ai-rouge bg-ai-rouge' : 'border-ai-noir70'"></div>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate" x-text="u"></p>
+                </div>
+              </div>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <button @click="analyzeFields()"
+              :disabled="!agency.trim() || !url.trim() || !previewUrlsList.length || mappingLoading"
+              class="w-full py-2 text-ai-violet font-semibold text-sm border border-ai-gris
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     hover:bg-ai-gris-cl transition-colors rounded">
+        <span x-text="mappingLoading ? 'Analyse des champs…' : 'Analyser le mapping des champs'"></span>
+      </button>
+
+      <div x-show="mappingError" class="text-xs text-ai-rouge" x-text="mappingError"></div>
+
+      <div x-show="mappingFields.length > 0" class="bg-white border border-ai-gris rounded overflow-hidden">
+        <div class="px-3 py-2 bg-ai-gris-cl border-b border-ai-gris flex items-center justify-between">
+          <p class="text-xs font-semibold text-ai-violet">
+            Mapping proposé (<span x-text="mappingFields.length"></span> champs source)
+          </p>
+          <button @click="resetMapping()" class="text-xs text-ai-noir70 hover:text-ai-rouge">Réinitialiser</button>
+        </div>
+        <div class="max-h-[40rem] overflow-auto">
+          <table class="min-w-full text-xs">
+            <thead>
+              <tr class="border-b border-ai-gris bg-ai-gris-cl">
+                <th class="text-left px-3 py-2 font-bold text-ai-violet">Champ source</th>
+                <th class="text-left px-3 py-2 font-bold text-ai-violet">Exemple</th>
+                <th class="text-left px-3 py-2 font-bold text-ai-violet">Champ Airtable proposé</th>
+                <th class="text-left px-3 py-2 font-bold text-ai-violet">Conf.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="f in mappingFields" :key="f.source_label">
+                <tr class="border-b border-ai-gris last:border-0">
+                  <td class="px-3 py-2 font-semibold text-black min-w-[220px]" x-text="f.source_label"></td>
+                  <td class="px-3 py-2 text-ai-noir70 min-w-[380px]"
+                      :title="(f.sample_values || []).join(' | ')"
+                      x-text="(f.sample_values || [])[0] || '—'"></td>
+                  <td class="px-3 py-2 min-w-[240px]">
+                    <select x-model="fieldMapping[f.source_label]" class="select-cell">
+                      <template x-for="target in mappingTargetFields" :key="target">
+                        <option x-bind:value="target"
+                                x-bind:selected="fieldMapping[f.source_label] === target"
+                                x-text="targetOptionLabel(target)"></option>
+                      </template>
+                    </select>
+                  </td>
+                  <td class="px-3 py-2 text-ai-noir70" x-text="Math.round((f.confidence || 0) * 100) + '%'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="pt-2 border-t border-ai-gris space-y-3">
+        <p class="text-xs text-ai-noir70">
+          Workflow : 1. prévisualiser les URLs, 2. analyser et ajuster le mapping, 3. lancer le scraping.
+        </p>
+        <button @click="startScraping('test')"
+                :disabled="!canStartScraping"
+                class="w-full py-3 text-white font-semibold text-sm
+                       disabled:bg-ai-gris disabled:text-ai-noir70 disabled:cursor-not-allowed
+                       transition-colors flex items-center justify-center gap-2 rounded"
+                :style="canStartScraping ? 'background:#E30513' : ''">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Tester les 3 premiers
+        </button>
+        <button @click="startScraping('full')"
+                :disabled="!canStartScraping"
+                class="w-full py-3 text-ai-violet font-semibold text-sm border border-ai-gris
+                       disabled:bg-ai-gris disabled:text-ai-noir70 disabled:cursor-not-allowed
+                       hover:bg-ai-gris-cl transition-colors rounded">
+          Tout scraper
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ÉTAPE 2 — SCRAPING ═══════════════ -->
+<section x-show="step === 2" x-transition class="max-w-3xl mx-auto">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h2 class="text-2xl font-bold text-black" x-text="agency"></h2>
+      <p class="text-sm text-ai-noir70 mt-0.5 truncate max-w-xl" x-text="url"></p>
+    </div>
+    <span class="text-sm text-ai-noir70 font-semibold" x-text="progress + ' / ' + (total || '?') + ' projets'"></span>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="bg-ai-gris-cl h-2 mb-6 rounded">
+    <div class="h-2 transition-all duration-500 rounded"
+         :style="'background:#E30513; width:' + (total ? Math.round(progress/total*100) : 0) + '%'"></div>
+  </div>
+
+  <div x-show="jobStatus === 'error'"
+       class="mb-4 p-4 bg-ai-rouge-clair border-l-4 border-ai-rouge text-sm text-black"
+       x-text="'Erreur : ' + jobError"></div>
+
+  <!-- Log -->
+  <div class="bg-ai-violet rounded p-4 h-72 overflow-y-auto space-y-1" x-ref="logbox">
+    <template x-for="(line, i) in logs" :key="i">
+      <p class="log-line"
+         :class="line.includes('✓') ? 'text-emerald-300' : line.includes('✗') ? 'text-red-300' : 'text-white/60'"
+         x-text="line"></p>
+    </template>
+    <p x-show="jobStatus === 'running'" class="log-line text-white/40 animate-pulse">…</p>
+  </div>
+
+  <!-- Previews -->
+  <div x-show="projects.length > 0" class="mt-6">
+    <p class="text-xs font-semibold text-ai-violet uppercase tracking-wide mb-3"
+       x-text="projects.length + ' projet(s) récupéré(s)'"></p>
+    <div class="grid grid-cols-3 gap-3">
+      <template x-for="(p, i) in projects.slice(-6)" :key="i">
+        <div class="bg-white border border-ai-gris rounded p-3 flex items-center gap-3">
+          <img :src="p.image_url" @error="$event.target.style.display='none'"
+               class="w-12 h-10 object-cover rounded flex-shrink-0">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-black truncate" x-text="p.projet || '—'"></p>
+            <p class="text-xs text-ai-noir70 truncate" x-text="p.lieu || p.annee || ''"></p>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div x-show="jobStatus === 'done'" class="mt-6 text-center">
+    <button @click="goToValidation()"
+            class="px-8 py-3 text-white text-sm font-semibold rounded transition-colors"
+            style="background:#E30513">
+      Valider les références →
+    </button>
+  </div>
+</section>
+
+<!-- ═══════════════ ÉTAPE 3 — VALIDATION ═══════════════ -->
+<section x-show="step === 3" x-transition>
+
+  <!-- Toolbar -->
+  <div class="flex items-center justify-between mb-4 gap-4">
+    <div>
+      <h2 class="text-xl font-bold text-black" x-text="agency"></h2>
+      <p class="text-sm text-ai-noir70 mt-0.5">
+        <span class="font-semibold text-ai-violet" x-text="projects.length"></span> projets ·
+        <span class="font-semibold" style="color:#E30513" x-text="newCount"></span> nouveaux ·
+        <span class="font-semibold text-amber-600" x-text="updateCount"></span> mises à jour ·
+        <span class="text-ai-noir70" x-text="(projects.length - selectedCount) + ' non sélectionnés'"></span>
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button @click="toggleAll(true)"
+              class="px-3 py-1.5 text-xs border border-ai-gris rounded hover:bg-ai-gris-cl">
+        Tout cocher
+      </button>
+      <button @click="toggleAll(false)"
+              class="px-3 py-1.5 text-xs border border-ai-gris rounded hover:bg-ai-gris-cl">
+        Tout décocher
+      </button>
+      <button @click="exportCsv()"
+              class="px-3 py-1.5 text-xs border border-ai-gris rounded hover:bg-ai-gris-cl flex items-center gap-1">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
+        CSV
+      </button>
+      <label class="px-3 py-1.5 text-xs border border-ai-gris rounded hover:bg-ai-gris-cl flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" x-model="tableWrap" class="rounded border-ai-gris">
+        Retour ligne
+      </label>
+      <button @click="step = 4; uploadProjects()"
+              :disabled="selectedCount === 0 || isPartialTest"
+              class="px-4 py-1.5 text-xs text-white rounded font-semibold
+                     disabled:bg-ai-gris disabled:cursor-not-allowed flex items-center gap-1.5"
+              :style="selectedCount > 0 && !isPartialTest ? 'background:#E30513' : ''">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
+        </svg>
+        Envoyer vers Airtable
+        <span class="bg-white/30 rounded-full px-1.5" x-text="selectedCount"></span>
+      </button>
+    </div>
+  </div>
+
+  <div x-show="isPartialTest" class="mb-4 bg-ai-rouge-clair border border-ai-rouge/30 rounded p-4 flex items-center justify-between gap-4">
+    <div>
+      <p class="text-sm font-semibold text-black">Test sur les 3 premiers projets</p>
+      <p class="text-xs text-ai-noir70 mt-1">Si le tableau convient, continuez le scraping à partir du projet suivant. Sinon revenez au mapping pour ajuster les correspondances.</p>
+    </div>
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <button @click="step = 1"
+              class="px-3 py-2 text-xs border border-ai-gris bg-white rounded hover:bg-ai-gris-cl">
+        Revenir au mapping
+      </button>
+      <button @click="startScraping('continue')"
+              class="px-4 py-2 text-xs text-white font-semibold rounded"
+              style="background:#E30513">
+        Continuer le scraping
+      </button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white border border-ai-gris rounded overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm validation-table" :class="tableWrap ? 'wrap-table' : 'truncate-table'">
+        <thead>
+          <tr class="border-b border-ai-gris">
+            <th class="w-8 px-3 py-3 col-sticky left-0">
+              <input type="checkbox"
+                     :checked="selectedCount === projects.length && projects.length > 0"
+                     @change="toggleAll($event.target.checked)"
+                     class="rounded border-ai-gris">
+            </th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide w-20">Statut</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide w-16">Conf.</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide w-16">Photo</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide min-w-[180px]">Projet *</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide min-w-[160px]">Mission</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide min-w-[140px]">Programme</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide min-w-[130px]">Neuf / Réhab</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide min-w-[110px]">Statut projet</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide min-w-[150px]">Lieu</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide w-16">Année</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide w-20">Surface</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide min-w-[160px]">Maître d'ouvrage</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide min-w-[130px]">Montant HT</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide min-w-[140px]">Labels</th>
+            <th class="px-2 py-3 text-left text-xs font-bold text-ai-violet uppercase tracking-wide min-w-[200px]">Description</th>
+            <th class="px-2 py-3 w-12"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="(p, i) in projects" :key="i">
+            <tr :class="[
+                  p._selected ? '' : 'opacity-50',
+                  i % 2 === 1 ? 'bg-ai-gris-cl' : 'bg-white',
+                ]"
+                :style="p._is_update ? 'border-left:3px solid #F59E0B' : 'border-left:3px solid transparent'"
+                class="hover:bg-ai-rouge-clair/30 transition-colors">
+
+              <td class="px-3 py-2 col-sticky left-0" :style="i % 2 === 1 ? 'background:#F2F2F2' : 'background:#fff'">
+                <input type="checkbox" x-model="p._selected" class="rounded border-ai-gris">
+              </td>
+
+              <td class="px-2 py-2">
+                <div class="flex flex-col gap-1">
+                  <span :class="p._is_update
+                      ? 'bg-amber-50 text-amber-800 border-amber-300'
+                      : 'bg-ai-rouge-clair text-ai-rouge border-ai-rouge'"
+                        class="px-2 py-0.5 rounded-full text-xs font-bold border whitespace-nowrap"
+                        :style="p._is_update ? '' : 'background:#F9E1E3; color:#E30513; border-color:#E30513;'"
+                        x-text="p._is_update ? '↑ MAJ' : '+ NOUVEAU'">
+                  </span>
+                  <span x-show="p._llm"
+                        class="px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap"
+                        style="background:#EEF2FF; color:#4F46E5; border-color:#C7D2FE;">
+                    ✦ LLM
+                  </span>
+                </div>
+              </td>
+
+              <td class="px-2 py-2">
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap"
+                      :class="(p._confidence || 0) >= 0.75
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : (p._confidence || 0) >= 0.5
+                          ? 'bg-amber-50 text-amber-700 border-amber-200'
+                          : 'bg-ai-rouge-clair text-ai-rouge border-ai-rouge'"
+                      :title="diagnosticTitle(p)"
+                      x-text="Math.round((p._confidence || 0) * 100) + '%'"></span>
+              </td>
+
+              <td class="px-2 py-2">
+                <a :href="p.url_fiche" target="_blank">
+                  <img :src="p.image_url" alt=""
+                       @error="$event.target.style.display='none'"
+                       class="w-16 h-11 object-cover rounded cursor-pointer hover:opacity-80">
+                </a>
+              </td>
+
+              <td class="px-1 py-1">
+                <input x-model="p.projet" type="text" placeholder="Nom du projet"
+                       class="input-cell" :style="!p.projet ? 'border-bottom-color:#E30513' : ''">
+              </td>
+
+              <td class="px-1 py-1">
+                <input x-model="p.mission" type="text" placeholder="Mission" class="input-cell">
+              </td>
+
+              <td class="px-1 py-1">
+                <select x-model="p.programme" class="select-cell">
+                  <option value="">—</option>
+                  <template x-for="prog in programmes" :key="prog">
+                    <option :value="prog" x-text="prog"></option>
+                  </template>
+                </select>
+              </td>
+
+              <td class="px-1 py-1">
+                <select x-model="p.rehab_neuf" multiple class="select-cell min-h-[52px]">
+                  <template x-for="opt in rehabNeufOptions" :key="opt">
+                    <option :value="opt" x-text="opt"></option>
+                  </template>
+                </select>
+              </td>
+
+              <td class="px-1 py-1">
+                <select x-model="p.statut" class="select-cell">
+                  <option value="">—</option>
+                  <option>Livré</option>
+                  <option>Chantier</option>
+                  <option>Étude</option>
+                  <option>Concours</option>
+                </select>
+              </td>
+
+              <td class="px-1 py-1">
+                <input x-model="p.lieu" type="text" placeholder="Ville (dépt)" class="input-cell">
+              </td>
+
+              <td class="px-1 py-1">
+                <input x-model.number="p.annee" type="number" placeholder="2024"
+                       class="input-cell text-center">
+              </td>
+
+              <td class="px-1 py-1">
+                <div class="flex items-center gap-0.5">
+                  <input x-model.number="p.surface_m2" type="number" placeholder="0"
+                         class="input-cell text-right">
+                  <span class="text-xs text-ai-noir70 flex-shrink-0">m²</span>
+                </div>
+              </td>
+
+              <td class="px-1 py-1">
+                <input x-model="p.maitre_ouvrage" type="text" placeholder="Client / MOA" class="input-cell">
+              </td>
+
+              <td class="px-1 py-1">
+                <input x-model="p.montant_ht" type="text" placeholder="2 500 000 € HT" class="input-cell">
+              </td>
+
+              <td class="px-1 py-1">
+                <input x-model="p.labels" type="text" placeholder="HQE, BBC…" class="input-cell">
+              </td>
+
+              <td class="px-1 py-1">
+                <input x-model="p.description" type="text" placeholder="Description courte" class="input-cell">
+              </td>
+
+              <td class="px-2 py-2">
+                <div class="flex items-center gap-1">
+                  <a :href="p.url_fiche" target="_blank"
+                     class="p-1 text-ai-noir70 hover:text-ai-rouge transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                    </svg>
+                  </a>
+                  <button @click="projects.splice(i, 1)"
+                          class="p-1 text-ai-noir70 hover:text-ai-rouge transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="text-xs text-ai-noir70 mt-3">
+    Les champs BET/Équipe et Image URL sont envoyés mais masqués dans ce tableau pour lisibilité.
+  </p>
+</section>
+
+<!-- ═══════════════ ÉTAPE 4 — UPLOAD ═══════════════ -->
+<section x-show="step === 4" x-transition class="max-w-3xl mx-auto">
+  <h2 class="text-2xl font-bold text-black mb-1">Upload Airtable</h2>
+
+  <div x-show="uploadStatus === 'running'" class="mb-6 mt-4">
+    <div class="bg-ai-gris-cl h-2 mb-3 rounded">
+      <div class="h-2 transition-all duration-500 rounded"
+           :style="'background:#E30513; width:' + (uploadResults.length / selectedCount * 100) + '%'"></div>
+    </div>
+    <p class="text-sm text-ai-noir70" x-text="uploadResults.length + ' / ' + selectedCount + ' envoyés…'"></p>
+  </div>
+
+  <div x-show="uploadStatus === 'done'" class="mb-6 mt-4">
+    <div class="grid grid-cols-3 gap-4 mb-6">
+      <div class="bg-ai-rouge-clair border-l-4 border-ai-rouge p-4 text-center rounded"
+           style="border-left-color:#E30513">
+        <p class="text-3xl font-bold" style="color:#E30513"
+           x-text="uploadResults.filter(r=>r.success && r.action==='created').length"></p>
+        <p class="text-sm text-black mt-1 font-semibold">Créés</p>
+      </div>
+      <div class="bg-amber-50 border-l-4 border-amber-500 p-4 text-center rounded">
+        <p class="text-3xl font-bold text-amber-600"
+           x-text="uploadResults.filter(r=>r.success && r.action==='updated').length"></p>
+        <p class="text-sm text-amber-800 mt-1 font-semibold">Mis à jour</p>
+      </div>
+      <div class="bg-ai-gris-cl border-l-4 border-ai-violet p-4 text-center rounded"
+           style="border-left-color:#30323E">
+        <p class="text-3xl font-bold text-ai-violet"
+           x-text="uploadResults.filter(r=>!r.success).length"></p>
+        <p class="text-sm text-ai-violet mt-1 font-semibold">Erreurs</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-ai-gris rounded overflow-hidden">
+    <div class="max-h-96 overflow-y-auto">
+      <template x-for="(r, i) in uploadResults" :key="i">
+        <div class="flex items-center justify-between px-4 py-2.5 border-b border-ai-gris last:border-0">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="text-lg flex-shrink-0 font-bold"
+                  :style="r.success
+                      ? (r.action==='created' ? 'color:#E30513' : 'color:#F59E0B')
+                      : 'color:#30323E'">
+              <span x-show="r.success && r.action === 'created'">+</span>
+              <span x-show="r.success && r.action === 'updated'">↑</span>
+              <span x-show="!r.success">✗</span>
+            </span>
+            <span class="text-sm text-black truncate" x-text="r.url_fiche"></span>
+          </div>
+          <span class="text-xs text-ai-noir70 flex-shrink-0 ml-4"
+                x-text="r.success ? r.action : r.error"></span>
+        </div>
+      </template>
+      <div x-show="uploadStatus === 'running' && uploadResults.length < selectedCount"
+           class="px-4 py-3 text-sm text-ai-noir70 animate-pulse">
+        Envoi en cours…
+      </div>
+    </div>
+  </div>
+
+  <div x-show="uploadStatus === 'done'" class="mt-6 flex gap-3 justify-center">
+    <button @click="exportCsv()"
+            class="px-4 py-2 border border-ai-gris rounded text-sm hover:bg-ai-gris-cl">
+      Exporter CSV
+    </button>
+    <button @click="resetApp()"
+            class="px-6 py-2 text-white rounded text-sm font-semibold"
+            style="background:#E30513">
+      Scraper une nouvelle agence
+    </button>
+  </div>
+</section>
+
+  </main>
+</div>
+
+<!-- Watermark .A -->
+<div class="ai-watermark">
+  <img src="https://hhkofvbptnrtwbazftlm.supabase.co/storage/v1/object/public/Branding/logo/sigle_Ai.svg"
+       alt=".A" style="height:40px; width:auto; opacity:0.20;">
+</div>
+
+<!-- ═══ ALPINE APP ═══ -->
+<script>
+const BACKEND = window.BACKEND_URL || '';
+
+async function apiErrorMessage(response) {
+  try {
+    const data = await response.json();
+    const detail = data.detail || data.error || '';
+    if (/api\.airtable\.com|Airtable|HTTPSConnectionPool|ProxyError|NameResolution|Failed to establish/i.test(detail)) {
+      return 'Airtable indisponible';
+    }
+    return String(detail || response.statusText || 'Erreur serveur').slice(0, 80);
+  } catch {
+    return response.statusText || 'Erreur serveur';
+  }
+}
+
+function app() {
+  return {
+    step: 1,
+    agency: '',
+    url: '',
+    maxProjects: 50,
+    dynamic: false,
+    useLlm: false,
+
+    llmConfigured: false,
+    llmSavedParsers: [],
+    llmModel: '',
+    llmUsage: null,
+
+    knownAgencies: [],
+    agencySearch: '',
+
+    atRecords: [],
+    atLoading: false,
+    atError: '',
+
+    previewLoading: false,
+    previewError: '',
+    previewUrlsList: [],
+    previewTotal: 0,
+    selectedPreviewUrl: '',
+
+    mappingLoading: false,
+    mappingError: '',
+    mappingFields: [],
+    mappingTargetFields: [
+      '__ignore__','projet','maitre_ouvrage','mission','programme','rehab_neuf',
+      'statut','surface_m2','lieu','annee','montant_ht',
+      'labels','bet_equipe','description',
+    ],
+    fieldMapping: {},
+
+    jobId: null,
+    jobStatus: null,
+    jobError: '',
+    progress: 0,
+    total: 0,
+    logs: [],
+    pollTimer: null,
+    runMode: 'full',
+    testModeActive: false,
+    validationOpened: false,
+    continueBaseProjects: [],
+    tableWrap: false,
+
+    projects: [],
+
+    uploadStatus: null,
+    uploadResults: [],
+
+    programmes: [
+      'Logement','Bureau','Équipement public','Enseignement','Culture',
+      'Sport','Santé','Commerce','Industrie','Hôtellerie',
+      'Réhabilitation','Espace public','Mixte','Autre',
+    ],
+    rehabNeufOptions: ['neuf', 'réhabilitation'],
+
+    get selectedCount() { return this.projects.filter(p => p._selected).length; },
+    get newCount()      { return this.projects.filter(p => !p._is_update).length; },
+    get updateCount()   { return this.projects.filter(p => p._is_update).length; },
+    get canStartScraping() {
+      return !!(this.agency.trim() && this.url.trim() && this.previewUrlsList.length && this.mappingFields.length);
+    },
+    get isPartialTest() {
+      return this.testModeActive && this.projects.length < Math.min(this.maxProjects || 0, this.previewTotal || this.previewUrlsList.length || 0);
+    },
+
+    get filteredAgencies() {
+      const q = this.agencySearch.trim().toLowerCase();
+      if (!q) return this.knownAgencies;
+      return this.knownAgencies.filter(a => a.name.toLowerCase().includes(q));
+    },
+
+    get agencyStats() {
+      const counts = {};
+      for (const r of this.atRecords) {
+        if (!r.agence) continue;
+        counts[r.agence] = (counts[r.agence] || 0) + 1;
+      }
+      return Object.entries(counts)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+    },
+
+    async init() {
+      await Promise.all([
+        this.loadAgencies(),
+        this.loadAirtableRecords(),
+        this.loadLlmStatus(),
+      ]);
+    },
+
+    async loadLlmStatus() {
+      try {
+        const r = await fetch(BACKEND + '/api/llm/status');
+        if (!r.ok) return;
+        const data = await r.json();
+        this.llmConfigured = data.configured || false;
+        this.llmModel = data.model || '';
+        this.llmUsage = data.usage || null;
+        this.llmSavedParsers = data.saved_parsers || [];
+      } catch {}
+    },
+
+    async loadAgencies() {
+      try {
+        const r = await fetch(BACKEND + '/api/agencies');
+        if (!r.ok) return;
+        const data = await r.json();
+        this.knownAgencies = data.agencies || [];
+      } catch {}
+    },
+
+    async loadAirtableRecords() {
+      this.atLoading = true;
+      this.atError = '';
+      try {
+        const r = await fetch(BACKEND + '/api/airtable/records');
+        if (!r.ok) throw new Error(await apiErrorMessage(r));
+        const data = await r.json();
+        this.atRecords = data.records || [];
+      } catch (e) {
+        this.atError = e.message || 'Airtable indisponible';
+      } finally {
+        this.atLoading = false;
+      }
+    },
+
+    selectAgency(ag) {
+      this.agency = ag.name;
+      if (ag.url) this.url = ag.url;
+      // Auto-detect dynamic for known JS-heavy sites
+      this.dynamic = /lt2a|wix|squarespace/i.test(ag.url || '');
+      this.resetDiscoveryState();
+    },
+
+    targetOptionLabel(value) {
+      return value === '__ignore__' ? 'Ignorer' : value;
+    },
+
+    resetDiscoveryState() {
+      this.previewError = '';
+      this.previewUrlsList = [];
+      this.previewTotal = 0;
+      this.selectedPreviewUrl = '';
+      this.resetMapping();
+    },
+
+    resetMapping() {
+      this.mappingError = '';
+      this.mappingFields = [];
+      this.fieldMapping = {};
+      this.testModeActive = false;
+      this.validationOpened = false;
+      this.continueBaseProjects = [];
+    },
+
+    async deleteParser(file) {
+      if (!confirm(`Supprimer le parser ${file} ?`)) return;
+      try {
+        const r = await fetch(BACKEND + `/api/parsers/${encodeURIComponent(file)}`, {
+          method: 'DELETE',
+        });
+        if (!r.ok) throw new Error(await apiErrorMessage(r));
+        await this.loadLlmStatus();
+      } catch (e) {
+        alert(e.message || 'Suppression impossible');
+      }
+    },
+
+    async previewUrls() {
+      if (!this.agency.trim() || !this.url.trim()) return;
+      this.previewLoading = true;
+      this.previewError = '';
+      this.previewUrlsList = [];
+      this.previewTotal = 0;
+      this.resetMapping();
+      try {
+        const r = await fetch(BACKEND + '/api/scrape/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agency: this.agency, url: this.url,
+            max_projects: this.maxProjects, dynamic: this.dynamic,
+            use_llm: this.useLlm,
+          }),
+        });
+        if (!r.ok) throw new Error(await apiErrorMessage(r));
+        const data = await r.json();
+        this.previewUrlsList = data.urls || [];
+        this.previewTotal = data.count || this.previewUrlsList.length;
+        this.selectedPreviewUrl = this.previewUrlsList[0] || '';
+        if (this.previewUrlsList.length === 0) this.previewError = 'Aucune URL projet détectée';
+      } catch (e) {
+        this.previewError = e.message || 'Prévisualisation impossible';
+      } finally {
+        this.previewLoading = false;
+        await this.loadLlmStatus();
+      }
+    },
+
+    async analyzeFields() {
+      if (!this.agency.trim() || !this.url.trim() || !this.previewUrlsList.length) return;
+      this.mappingLoading = true;
+      this.mappingError = '';
+      this.mappingFields = [];
+      this.fieldMapping = {};
+      try {
+        const r = await fetch(BACKEND + '/api/scrape/analyze-fields', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agency: this.agency, url: this.url,
+            max_projects: Math.min(this.maxProjects || 3, 3), dynamic: this.dynamic,
+            use_llm: this.useLlm,
+            sample_url: this.selectedPreviewUrl || null,
+          }),
+        });
+        if (!r.ok) throw new Error(await apiErrorMessage(r));
+        const data = await r.json();
+        const rows = data.fields || [];
+        const mapping = {};
+        for (const f of rows) {
+          mapping[f.source_label] = f.suggested_field || '__ignore__';
+        }
+        this.fieldMapping = mapping;
+        this.mappingFields = rows;
+        if (this.mappingFields.length === 0) this.mappingError = 'Aucun champ structuré détecté';
+      } catch (e) {
+        this.mappingError = e.message || 'Analyse impossible';
+      } finally {
+        this.mappingLoading = false;
+        await this.loadLlmStatus();
+      }
+    },
+
+    async startScraping(mode = 'full') {
+      if (!this.canStartScraping) return;
+      await this.loadAirtableRecords();
+      const continuing = mode === 'continue';
+      const testing = mode === 'test';
+      const startIndex = continuing ? this.projects.length : 0;
+      const maxProjects = testing ? Math.min(3, this.maxProjects || 3, this.previewUrlsList.length) : this.maxProjects;
+      this.runMode = testing ? 'test' : 'full';
+      this.testModeActive = testing || (continuing ? this.testModeActive : false);
+      this.validationOpened = false;
+      this.continueBaseProjects = continuing ? this.projects.map(p => ({ ...p })) : [];
+      this.step = 2;
+      this.progress = 0;
+      this.total = 0;
+      this.logs = [];
+      if (!continuing) this.projects = [];
+      this.jobStatus = 'running';
+
+      try {
+        const r = await fetch(BACKEND + '/api/scrape/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agency: this.agency, url: this.url,
+            max_projects: maxProjects, dynamic: this.dynamic,
+            use_llm: this.useLlm,
+            start_index: startIndex,
+            field_mapping: this.fieldMapping,
+          }),
+        });
+        if (!r.ok) throw new Error(await r.text());
+        const { job_id } = await r.json();
+        this.jobId = job_id;
+        this.pollStatus();
+      } catch (e) {
+        this.jobStatus = 'error';
+        this.jobError = e.message;
+      }
+    },
+
+    pollStatus() {
+      if (this.pollTimer) clearInterval(this.pollTimer);
+      this.pollTimer = setInterval(async () => {
+        try {
+          const r = await fetch(BACKEND + `/api/scrape/${this.jobId}`);
+          if (!r.ok) return;
+          const data = await r.json();
+          this.progress = data.progress || 0;
+          this.total = data.total || 0;
+          this.logs = data.logs || [];
+          const batchProjects = (data.projects || []).map(p => this.normalizeProject(p));
+          this.projects = this.continueBaseProjects.length
+            ? [...this.continueBaseProjects, ...batchProjects]
+            : batchProjects;
+          this.jobStatus = data.status;
+          this.jobError = data.error || '';
+          this.$nextTick(() => {
+            if (this.$refs.logbox) this.$refs.logbox.scrollTop = this.$refs.logbox.scrollHeight;
+          });
+          if (data.status !== 'running') {
+            clearInterval(this.pollTimer);
+            await this.loadLlmStatus();
+            if (data.status === 'done' && this.testModeActive && !this.validationOpened) {
+              this.validationOpened = true;
+              this.goToValidation();
+            }
+          }
+        } catch {}
+      }, 600);
+    },
+
+    goToValidation() {
+      const urlMap = {};
+      for (const rec of this.atRecords) {
+        if (rec.url_fiche) urlMap[rec.url_fiche.trim()] = rec.id;
+      }
+      for (const p of this.projects) {
+        this.normalizeProject(p);
+        const aid = urlMap[p.url_fiche?.trim()];
+        p._is_update = !!aid;
+        p._airtable_id = aid || null;
+      }
+      if (!this.isPartialTest) this.testModeActive = false;
+      this.step = 3;
+    },
+
+    toggleAll(val) { this.projects.forEach(p => p._selected = val); },
+
+    normalizeProject(p) {
+      if (!Array.isArray(p.rehab_neuf)) {
+        p.rehab_neuf = p.rehab_neuf
+          ? String(p.rehab_neuf).split(',').map(x => x.trim()).filter(Boolean)
+          : ['neuf'];
+      }
+      p.rehab_neuf = p.rehab_neuf.filter(x => this.rehabNeufOptions.includes(x));
+      if (p.rehab_neuf.length === 0) p.rehab_neuf = ['neuf'];
+      if (typeof p._selected !== 'boolean') p._selected = true;
+      if (typeof p._confidence !== 'number') p._confidence = 0;
+      return p;
+    },
+
+    diagnosticTitle(p) {
+      const d = p._diagnostics || {};
+      const missing = d.missing_fields?.length ? d.missing_fields.join(', ') : 'aucun champ critique manquant';
+      const meta = d.meta_keys?.length ? d.meta_keys.join(', ') : 'aucune métadonnée structurée';
+      return `Champs manquants: ${missing}\nMétadonnées: ${meta}`;
+    },
+
+    async uploadProjects() {
+      this.uploadStatus = 'running';
+      this.uploadResults = [];
+      const selected = this.projects.filter(p => p._selected).map(p => this.normalizeProject(p));
+      try {
+        const r = await fetch(BACKEND + '/api/upsert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projects: selected }),
+        });
+        if (!r.ok) throw new Error(await r.text());
+        const data = await r.json();
+        this.uploadResults = data.results || [];
+      } catch (e) {
+        this.uploadResults = selected.map(p => ({
+          url_fiche: p.url_fiche, success: false, error: e.message,
+        }));
+      }
+      this.uploadStatus = 'done';
+      await this.loadAirtableRecords();
+    },
+
+    exportCsv() {
+      const fields = [
+        'agence','projet','maitre_ouvrage','mission','programme','statut',
+        'rehab_neuf','surface_m2','lieu','annee','montant_ht','labels',
+        'bet_equipe','description','image_url','url_fiche',
+      ];
+      const rows = [fields.join(',')];
+      for (const p of this.projects) {
+        rows.push(fields.map(f => {
+          const v = Array.isArray(p[f]) ? p[f].join(', ') : (p[f] ?? '');
+          return '"' + String(v).replace(/"/g, '""') + '"';
+        }).join(','));
+      }
+      const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${this.agency.replace(/\s+/g, '_')}_projets.csv`;
+      a.click();
+    },
+
+    resetApp() {
+      this.step = 1;
+      this.agency = '';
+      this.url = '';
+      this.useLlm = false;
+      this.projects = [];
+      this.uploadResults = [];
+      this.uploadStatus = null;
+      this.runMode = 'full';
+      this.testModeActive = false;
+      this.validationOpened = false;
+      this.continueBaseProjects = [];
+      this.jobId = null;
+      this.logs = [];
+      this.agencySearch = '';
+      this.previewLoading = false;
+      this.previewError = '';
+      this.previewUrlsList = [];
+      this.previewTotal = 0;
+      this.resetMapping();
+      this.loadAirtableRecords();
+      this.loadLlmStatus();
+    },
+  };
+}
+</script>
+
+</body>
+</html>

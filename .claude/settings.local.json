@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(playwright install *)",
+      "Bash(python scraper.py --agency \"Encore Heureux\" --url \"https://encoreheureux.org/fr/projets\" --max 3 --output encore_heureux_test.csv)",
+      "Read(//c/Users/cleme/.claude/**)",
+      "Read(//c/Users/cleme/**)",
+      "Bash(reg query *)",
+      "Bash(python -)",
+      "Bash(python -c \"from dotenv import load_dotenv; load_dotenv\\(\\); import os; print\\('KEY:', os.environ.get\\('ANTHROPIC_API_KEY','NOT FOUND'\\)[:20]\\)\")",
+      "Bash(python -c \"from dotenv import load_dotenv; load_dotenv\\(verbose=True\\); import os; print\\(os.environ.get\\('ANTHROPIC_API_KEY','NOT FOUND'\\)[:25]\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(uvicorn server:app --port 8000)",
+      "Bash(curl -s http://localhost:8000/api/airtable/records)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'Airtable OK — {d[\\\\\"count\\\\\"]} fiches'\\)\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)[:500]\\)\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(t['name']\\) for t in d.get\\('tables',[]\\)]\")",
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(uvicorn server:app --port 8000 --reload)",
+      "Bash(curl -s -m 10 http://localhost:8000/api/airtable/records)",
+      "Bash(netstat -ano)",
+      "Bash(awk '{print $5}')",
+      "Bash(xargs -I {} taskkill /F /PID {})",
+      "PowerShell($pid8000 = \\(Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue\\).OwningProcess; if \\($pid8000\\) { Stop-Process -Id $pid8000 -Force; Write-Output \"killed $pid8000\" } else { Write-Output \"no process\" })",
+      "Bash(curl -s -m 15 http://localhost:8000/api/airtable/records)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Job ID:', d.get\\('job_id'\\)\\)\")",
+      "Bash(curl -s \"http://localhost:8000/api/scrape/dfcee5f8-e4f8-4f7b-9ed2-9ee28e86347c\")",
+      "Bash(curl -s -o /dev/null -w \"Status: %{http_code}\\\\n\" http://localhost:8000/)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Job:', d.get\\('job_id'\\)\\)\")",
+      "Bash(curl -s \"http://localhost:8000/api/scrape/61a14bce-fb67-4a96-9f4f-8be96dfc8b93\")",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('OK -', d.get\\('count','?'\\),'records'\\)\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s http://localhost:8000/api/agencies)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('server.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(curl -s \"http://localhost:8000/api/llm/status\")",
+      "Bash(python -m json.tool)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; Write-Host \"Killed PID $_\" })",
+      "Bash(python -m unittest tests.test_parsing)"
+    ]
+  }
+}

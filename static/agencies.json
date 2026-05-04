@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Encore Heureux",
+    "url": "https://encoreheureux.org/fr/projets",
+    "dynamic": false
+  },
+  {
+    "name": "LT2A",
+    "url": "https://www.lt2a.com/work",
+    "dynamic": true
+  },
+  {
+    "name": "Explorations Architecture",
+    "url": "https://explorations-architecture.com/fr/category/projets/",
+    "dynamic": false
+  }
+]
