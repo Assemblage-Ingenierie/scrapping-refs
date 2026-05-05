@@ -56,7 +56,27 @@
       "Bash(\"C:/Users/amaur/AppData/Local/Python/pythoncore-3.14-64/python.exe\" -m pip install -r requirements.txt)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); agences=d.get\\('agencies',[]\\); print\\(f'{len\\(agences\\)} agences'\\); [print\\(' -', a['name'], '|', a.get\\('url','\\(pas d URL\\)'\\)\\) for a in agences[:10]]\")",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git config *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f\\\\\"{len\\(d.get\\('agencies',[]\\)\\)} agences ✓\\\\\"\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f\\\\\"{len\\(d.get\\('records',[]\\)\\)} fiches projets ✓\\\\\"\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(len\\(d.get\\('agencies',[]\\)\\), 'agences OK'\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(len\\(d.get\\('records',[]\\)\\), 'fiches projets OK'\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s \"http://localhost:8000/api/preview-urls\" -X POST -H \"Content-Type: application/json\" -d '{\"agency\":\"M. Vilo Bach\",\"url\":\"https://www.vilobach.com/experiences/\",\"dynamic\":false}')",
+      "Bash(curl -s http://localhost:8000/openapi.json)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(p\\) for p in d.get\\('paths',{}\\) if 'preview' in p.lower\\(\\) or 'url' in p.lower\\(\\)]\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('method:', d.get\\('method'\\)\\); print\\('sample:', json.dumps\\(d.get\\('sample',{}\\), ensure_ascii=False, indent=2\\)[:1000]\\)\")",
+      "Bash(curl -s \"http://localhost:8000/openapi.json\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, ensure_ascii=False, indent=2\\)[:2000]\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/api/agencies)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('job_id:', d.get\\('job_id'\\)\\)\")",
+      "Bash(curl -s \"http://localhost:8000/api/scrape/1d26a9ba-7736-466c-b8a2-c18c9ea6ca55\")",
+      "Bash(curl -s \"https://api.airtable.com/v0/meta/bases/$\\(grep AIRTABLE_BASE_ID .env)",
+      "Bash(python3 -c \"import sys,json; print\\(json.load\\(sys.stdin\\).get\\('job_id'\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(len\\(d.get\\('records',[]\\)\\), 'fiches OK'\\)\")",
+      "Bash(python3 -c \"import sys,json; jid=json.load\\(sys.stdin\\).get\\('job_id'\\); print\\('job_id:', jid\\); open\\('/tmp/jid.txt','w'\\).write\\(jid or ''\\)\")",
+      "Bash(curl -s \"http://localhost:8000/api/scrape/8bd160b7-c787-41f4-9c45-3c884ce1502b\")"
     ]
   }
 }

@@ -83,12 +83,13 @@ app.add_middleware(
 # Airtable utilities
 # ---------------------------------------------------------------------------
 PRIVATE_FIELDS = {"_selected", "_is_update", "_airtable_id", "_error", "_confidence", "_field_sources", "_diagnostics"}
-MULTISELECT_FIELDS = {"programme", "labels", "bet_equipe", "rehab_neuf"}
+MULTISELECT_FIELDS = {"programme_detail", "labels", "bet_equipe", "rehab_neuf"}
 INT_FIELDS = {"surface_m2", "annee"}
 LINK_FIELDS = {"agence"}  # → Organisation table
 AIRTABLE_FIELD_NAMES = {
-    # Airtable field created by the user; keep a Python-safe key in the app.
-    "rehab_neuf": "rehab/neuf",
+    # Internal Python key → exact Airtable field name
+    "rehab_neuf":       "rehab/neuf",
+    "programme_detail": "programme_détail",
 }
 
 AT_HEADERS = lambda: {
@@ -214,7 +215,7 @@ def _to_airtable_fields(project: dict) -> dict:
     fields: dict[str, Any] = {}
 
     # Plain text / single select fields
-    for k in ("projet", "mission", "lieu", "description", "image_url", "url_fiche", "statut", "maitre_ouvrage"):
+    for k in ("projet", "mission", "lieu", "description", "image_url", "url_fiche", "statut", "maitre_ouvrage", "programme"):
         v = project.get(k)
         if v not in (None, ""):
             fields[k] = v
@@ -224,10 +225,16 @@ def _to_airtable_fields(project: dict) -> dict:
         v = project.get(k)
         if v in (None, ""):
             continue
-        try:
-            fields[k] = int(float(str(v).replace(" ", "").replace("\xa0", "")))
-        except (ValueError, TypeError):
-            pass
+        if k == "surface_m2":
+            # Use parse_surface to handle strings like "4 500 m2" or "4500 m²"
+            parsed = parse_surface(str(v)) if isinstance(v, str) else (int(v) if isinstance(v, (int, float)) else None)
+            if parsed is not None:
+                fields[k] = parsed
+        else:
+            try:
+                fields[k] = int(float(str(v).replace(" ", "").replace("\xa0", "")))
+            except (ValueError, TypeError):
+                pass
 
     # Currency: montant_ht
     montant_num = _parse_montant(project.get("montant_ht", ""))
@@ -374,6 +381,13 @@ def _same_listing_section(url: str, base: str) -> bool:
     if len(base_parts) >= 2 and base_parts[0] == "index.php" and len(url_parts) >= 2 and url_parts[0] == "index.php":
         section = base_parts[1]
         return url_parts[1] in {section, "projets"}
+    # When listing is at a non-root sub-path (e.g. /experiences/ or /realisations/),
+    # restrict to URLs whose first segment is related (singular/plural variant).
+    if base_parts and url_parts:
+        # Normalize singular/plural by stripping trailing 's'
+        base_root = base_parts[0].rstrip("s")   # "experiences" → "experience"
+        url_root  = url_parts[0].rstrip("s")    # "experience"  → "experience"
+        return base_root == url_root or url_parts[:len(base_parts)] == base_parts
     return True
 
 
@@ -427,8 +441,8 @@ def extract_project_urls(agency: str, html: str, base: str) -> list[str]:
     skip = re.compile(
         r"\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|zip)$"
         r"|/(contact|about|team|equipe|agence|actualites|news|blog|journal|presse|press|"
-        r"mentions|legal|privacy|cgv|jobs|carrieres|recrutement|tag|category|author|404|"
-        r"infos|interieurs|espace-public)(/|$)",
+        r"mentions|mentions-legales|legal|privacy|cgv|jobs|carrieres|recrutement|tag|category|author|404|"
+        r"infos|interieurs|espace-public|presentation|publications?|services?|apropos|a-propos)(/|$)",
         re.IGNORECASE,
     )
     for a in soup.find_all("a", href=True):
@@ -690,33 +704,288 @@ def detect_project_urls(agency: str, html: str, base: str, use_llm: bool = False
 # ---------------------------------------------------------------------------
 # Text parser (rule-based, no Claude needed)
 # ---------------------------------------------------------------------------
-PROGRAMME_MAP = {
-    "logement": "Logement",
-    "bureau": "Bureau",
-    "bureaux": "Bureau",
-    "culture": "Culture",
-    "éducation": "Enseignement",
-    "école": "Enseignement",
-    "ecole": "Enseignement",
-    "scolaire": "Enseignement",
-    "enseignement": "Enseignement",
-    "sport": "Sport",
-    "santé": "Santé",
-    "commerce": "Commerce",
-    "industrie": "Industrie",
-    "hôtellerie": "Hôtellerie",
-    "espace public": "Espace public",
-    "équipement public": "Équipement public",
-    "tiers-lieu": "Mixte",
-    "réhabilitation": "Réhabilitation",
+# ---------------------------------------------------------------------------
+# Programme taxonomy (principal → [détails])
+# ---------------------------------------------------------------------------
+PROGRAMME_TAXONOMY: dict[str, list[str]] = {
+    "Éducation": [
+        "Scolaire", "Restauration scolaire", "Centre de loisir",
+        "Enseignement supérieur", "Formation professionnelle", "Recherche / laboratoire",
+    ],
+    "Culture": [
+        "Musée / centre d'exposition", "Théâtre / spectacle vivant",
+        "Bibliothèque / médiathèque", "Patrimoine / monument / réhabilitation historique",
+        "Lieux de culte",
+    ],
+    "Sport & loisirs": [
+        "Équipement sportif", "Loisirs / détente", "Parc / paysage / espace public",
+    ],
+    "Santé & social": [
+        "Hôpital / clinique", "Médico-social",
+        "Social / insertion / hébergement d'urgence",
+    ],
+    "Logement": [
+        "Logement collectif", "Logement individuel",
+        "Résidence spécifique", "Hébergement",
+    ],
+    "Tertiaire": ["Bureaux", "Administration publique"],
+    "Commerce & activités": ["Commerce / Restauration", "Marché / halle", "Hôtel"],
+    "Industrie & logistique": [
+        "Industrie / production", "Entrepôt / logistique", "Infrastructure technique",
+    ],
+    "Mobilité": ["Gare / station", "Aéroport / port", "Parking"],
+    "Ouvrage d'art": ["Pont", "Passerelle"],
+    "Flottant": ["Fluvial", "Maritime"],
+    "Art": ["Œuvre d'art", "Scénographie"],
+    "Mixte": [],
 }
-PROGRAMME_VALUES = {
-    "Logement", "Bureau", "Équipement public", "Enseignement", "Culture",
-    "Sport", "Santé", "Commerce", "Industrie", "Hôtellerie",
-    "Réhabilitation", "Espace public", "Mixte", "Autre",
-    # Mojibake compatibility for existing source strings in this file.
-    "Ã‰quipement public", "SantÃ©", "HÃ´tellerie", "RÃ©habilitation",
+
+PROGRAMME_VALUES: set[str] = set(PROGRAMME_TAXONOMY.keys())
+PROGRAMME_DETAIL_VALUES: set[str] = {
+    d for details in PROGRAMME_TAXONOMY.values() for d in details
 }
+
+# Ordered list: most specific keywords first → principal
+# (list of tuples to preserve order; first match wins)
+PROGRAMME_KEYWORD_MAP: list[tuple[str, str]] = [
+    # Éducation
+    ("école primaire",              "Éducation"),
+    ("école maternelle",            "Éducation"),
+    ("enseignement supérieur",      "Éducation"),
+    ("grande école",                "Éducation"),
+    ("formation professionnelle",   "Éducation"),
+    ("restauration scolaire",       "Éducation"),
+    ("centre de loisir",            "Éducation"),
+    ("recherche",                   "Éducation"),
+    ("laboratoire",                 "Éducation"),
+    ("maternelle",                  "Éducation"),
+    ("élémentaire",                 "Éducation"),
+    ("scolaire",                    "Éducation"),
+    ("école",                       "Éducation"),
+    ("collège",                     "Éducation"),
+    ("lycée",                       "Éducation"),
+    ("université",                  "Éducation"),
+    ("crèche",                      "Éducation"),
+    ("internat",                    "Éducation"),
+    ("éducation",                   "Éducation"),
+    # Culture
+    ("salle de spectacle",          "Culture"),
+    ("lieu de culte",               "Culture"),
+    ("centre d'exposition",         "Culture"),
+    ("musée",                       "Culture"),
+    ("théâtre",                     "Culture"),
+    ("opéra",                       "Culture"),
+    ("cinéma",                      "Culture"),
+    ("bibliothèque",                "Culture"),
+    ("médiathèque",                 "Culture"),
+    ("église",                      "Culture"),
+    ("mosquée",                     "Culture"),
+    ("synagogue",                   "Culture"),
+    ("crématorium",                 "Culture"),
+    ("funérarium",                  "Culture"),
+    ("cimetière",                   "Culture"),
+    # Sport & loisirs
+    ("équipement sportif",          "Sport & loisirs"),
+    ("espace public",               "Sport & loisirs"),
+    ("gymnase",                     "Sport & loisirs"),
+    ("piscine",                     "Sport & loisirs"),
+    ("stade",                       "Sport & loisirs"),
+    ("sport",                       "Sport & loisirs"),
+    ("parc",                        "Sport & loisirs"),
+    ("urbanisme",                   "Sport & loisirs"),
+    ("loisir",                      "Sport & loisirs"),
+    # Santé & social
+    ("hébergement d'urgence",       "Santé & social"),
+    ("médico-social",               "Santé & social"),
+    ("centre de santé",             "Santé & social"),
+    ("hôpital",                     "Santé & social"),
+    ("clinique",                    "Santé & social"),
+    ("ehpad",                       "Santé & social"),
+    ("insertion",                   "Santé & social"),
+    ("santé",                       "Santé & social"),
+    # Logement
+    ("logement collectif",          "Logement"),
+    ("logement individuel",         "Logement"),
+    ("logements collectifs",        "Logement"),
+    ("logements individuels",       "Logement"),
+    ("résidence étudiante",         "Logement"),
+    ("résidence seniors",           "Logement"),
+    ("habitat participatif",        "Logement"),
+    ("logement social",             "Logement"),
+    ("logement",                    "Logement"),
+    ("résidence",                   "Logement"),
+    ("foyer",                       "Logement"),
+    ("hébergement",                 "Logement"),
+    # Tertiaire
+    ("bâtiment administratif",      "Tertiaire"),
+    ("administration publique",     "Tertiaire"),
+    ("bureaux",                     "Tertiaire"),
+    ("bureau",                      "Tertiaire"),
+    ("tertiaire",                   "Tertiaire"),
+    ("mairie",                      "Tertiaire"),
+    ("préfecture",                  "Tertiaire"),
+    ("tribunal",                    "Tertiaire"),
+    ("commissariat",                "Tertiaire"),
+    ("ambassade",                   "Tertiaire"),
+    # Commerce & activités
+    ("commerce / restauration",     "Commerce & activités"),
+    ("marché / halle",              "Commerce & activités"),
+    ("hôtel",                       "Commerce & activités"),
+    ("commerce",                    "Commerce & activités"),
+    ("restaurant",                  "Commerce & activités"),
+    ("restauration",                "Commerce & activités"),
+    ("retail",                      "Commerce & activités"),
+    ("marché",                      "Commerce & activités"),
+    ("halle",                       "Commerce & activités"),
+    # Industrie & logistique
+    ("industrie / production",      "Industrie & logistique"),
+    ("entrepôt",                    "Industrie & logistique"),
+    ("logistique",                  "Industrie & logistique"),
+    ("infrastructure",              "Industrie & logistique"),
+    ("industrie",                   "Industrie & logistique"),
+    # Mobilité
+    ("gare",                        "Mobilité"),
+    ("aéroport",                    "Mobilité"),
+    ("parking",                     "Mobilité"),
+    # Ouvrage d'art
+    ("passerelle",                  "Ouvrage d'art"),
+    ("pont",                        "Ouvrage d'art"),
+    # Flottant
+    ("fluvial",                     "Flottant"),
+    ("maritime",                    "Flottant"),
+    ("péniche",                     "Flottant"),
+    # Art
+    ("scénographie",                "Art"),
+    ("œuvre d'art",                 "Art"),
+    ("installation artistique",     "Art"),
+]
+
+# keyword → detail (ordered, first match wins per detail value)
+PROGRAMME_DETAIL_KEYWORD_MAP: list[tuple[str, str]] = [
+    # Éducation
+    ("école primaire",                          "Scolaire"),
+    ("école maternelle",                        "Scolaire"),
+    ("maternelle",                              "Scolaire"),
+    ("élémentaire",                             "Scolaire"),
+    ("scolaire",                                "Scolaire"),
+    ("école",                                   "Scolaire"),
+    ("collège",                                 "Scolaire"),
+    ("lycée",                                   "Scolaire"),
+    ("cantine",                                 "Restauration scolaire"),
+    ("restauration scolaire",                   "Restauration scolaire"),
+    ("centre de loisir",                        "Centre de loisir"),
+    ("enseignement supérieur",                  "Enseignement supérieur"),
+    ("université",                              "Enseignement supérieur"),
+    ("grande école",                            "Enseignement supérieur"),
+    ("formation professionnelle",               "Formation professionnelle"),
+    ("cfa",                                     "Formation professionnelle"),
+    ("recherche",                               "Recherche / laboratoire"),
+    ("laboratoire",                             "Recherche / laboratoire"),
+    # Culture
+    ("musée",                                   "Musée / centre d'exposition"),
+    ("centre d'exposition",                     "Musée / centre d'exposition"),
+    ("salle de spectacle",                      "Théâtre / spectacle vivant"),
+    ("théâtre",                                 "Théâtre / spectacle vivant"),
+    ("opéra",                                   "Théâtre / spectacle vivant"),
+    ("cinéma",                                  "Théâtre / spectacle vivant"),
+    ("spectacle vivant",                        "Théâtre / spectacle vivant"),
+    ("bibliothèque",                            "Bibliothèque / médiathèque"),
+    ("médiathèque",                             "Bibliothèque / médiathèque"),
+    ("patrimoine",                              "Patrimoine / monument / réhabilitation historique"),
+    ("monument",                                "Patrimoine / monument / réhabilitation historique"),
+    ("historique",                              "Patrimoine / monument / réhabilitation historique"),
+    ("classé",                                  "Patrimoine / monument / réhabilitation historique"),
+    ("lieu de culte",                           "Lieux de culte"),
+    ("église",                                  "Lieux de culte"),
+    ("mosquée",                                 "Lieux de culte"),
+    ("synagogue",                               "Lieux de culte"),
+    ("crématorium",                             "Lieux de culte"),
+    ("funérarium",                              "Lieux de culte"),
+    ("cimetière",                               "Lieux de culte"),
+    # Sport & loisirs
+    ("équipement sportif",                      "Équipement sportif"),
+    ("salle de sport",                          "Équipement sportif"),
+    ("gymnase",                                 "Équipement sportif"),
+    ("piscine",                                 "Équipement sportif"),
+    ("stade",                                   "Équipement sportif"),
+    ("loisir",                                  "Loisirs / détente"),
+    ("parc",                                    "Parc / paysage / espace public"),
+    ("espace public",                           "Parc / paysage / espace public"),
+    ("jardin",                                  "Parc / paysage / espace public"),
+    ("place publique",                          "Parc / paysage / espace public"),
+    ("urbanisme",                               "Parc / paysage / espace public"),
+    ("aménagement urbain",                      "Parc / paysage / espace public"),
+    # Santé & social
+    ("hôpital",                                 "Hôpital / clinique"),
+    ("clinique",                                "Hôpital / clinique"),
+    ("centre de santé",                         "Hôpital / clinique"),
+    ("ehpad",                                   "Médico-social"),
+    ("handicap",                                "Médico-social"),
+    ("médico-social",                           "Médico-social"),
+    ("médico social",                           "Médico-social"),
+    ("insertion",                               "Social / insertion / hébergement d'urgence"),
+    ("hébergement d'urgence",                   "Social / insertion / hébergement d'urgence"),
+    ("sans-abri",                               "Social / insertion / hébergement d'urgence"),
+    ("samu social",                             "Social / insertion / hébergement d'urgence"),
+    # Logement
+    ("logement collectif",                      "Logement collectif"),
+    ("logements collectifs",                    "Logement collectif"),
+    ("logement individuel",                     "Logement individuel"),
+    ("logements individuels",                   "Logement individuel"),
+    ("maison individuelle",                     "Logement individuel"),
+    ("résidence étudiante",                     "Résidence spécifique"),
+    ("résidence seniors",                       "Résidence spécifique"),
+    ("résidence senior",                        "Résidence spécifique"),
+    ("foyer",                                   "Hébergement"),
+    ("résidence sociale",                       "Hébergement"),
+    # Tertiaire
+    ("bureaux",                                 "Bureaux"),
+    ("bureau",                                  "Bureaux"),
+    ("coworking",                               "Bureaux"),
+    ("bâtiment administratif",                  "Administration publique"),
+    ("mairie",                                  "Administration publique"),
+    ("préfecture",                              "Administration publique"),
+    ("tribunal",                                "Administration publique"),
+    ("commissariat",                            "Administration publique"),
+    ("ambassade",                               "Administration publique"),
+    # Commerce & activités
+    ("commerce",                                "Commerce / Restauration"),
+    ("restaurant",                              "Commerce / Restauration"),
+    ("restauration",                            "Commerce / Restauration"),
+    ("retail",                                  "Commerce / Restauration"),
+    ("marché",                                  "Marché / halle"),
+    ("halle",                                   "Marché / halle"),
+    ("hôtel",                                   "Hôtel"),
+    # Industrie & logistique
+    ("industrie",                               "Industrie / production"),
+    ("production",                              "Industrie / production"),
+    ("entrepôt",                                "Entrepôt / logistique"),
+    ("logistique",                              "Entrepôt / logistique"),
+    ("infrastructure",                          "Infrastructure technique"),
+    # Mobilité
+    ("gare",                                    "Gare / station"),
+    ("station",                                 "Gare / station"),
+    ("métro",                                   "Gare / station"),
+    ("aéroport",                                "Aéroport / port"),
+    ("port",                                    "Aéroport / port"),
+    ("parking",                                 "Parking"),
+    # Ouvrage d'art
+    ("pont",                                    "Pont"),
+    ("passerelle",                              "Passerelle"),
+    # Flottant
+    ("fluvial",                                 "Fluvial"),
+    ("péniche",                                 "Fluvial"),
+    ("maritime",                                "Maritime"),
+    ("bateau",                                  "Maritime"),
+    # Art
+    ("scénographie",                            "Scénographie"),
+    ("œuvre d'art",                             "Œuvre d'art"),
+    ("oeuvre d'art",                            "Œuvre d'art"),
+    ("installation artistique",                 "Œuvre d'art"),
+]
+
+# Keep PROGRAMME_MAP as alias for backward compat with saved parsers
+PROGRAMME_MAP = {k: v for k, v in PROGRAMME_KEYWORD_MAP}
 STATUT_VALUES = {"Livré", "Chantier", "Étude", "Concours", "LivrÃ©", "Ã‰tude"}
 
 
@@ -746,6 +1015,7 @@ SCRAPPABLE_FIELDS = [
     "maitre_ouvrage",
     "mission",
     "programme",
+    "programme_detail",
     "rehab_neuf",
     "statut",
     "surface_m2",
@@ -1090,6 +1360,19 @@ def _description_from_text(text: str, title: str = "") -> str:
     return ""
 
 
+def _coerce_field_value(target: str, value: str) -> Any:
+    """Parse string values into the correct Python type for a target field."""
+    if not value:
+        return value
+    if target == "surface_m2":
+        parsed = parse_surface(value)
+        return parsed if parsed is not None else value
+    if target == "annee":
+        parsed = extract_year(value)
+        return parsed if parsed is not None else value
+    return value
+
+
 def apply_project_field_mapping(project: dict, payload: dict, mapping: dict[str, str] | None):
     raw_samples = payload.get("raw_meta", {})
     title = payload.get("title", "")
@@ -1101,7 +1384,7 @@ def apply_project_field_mapping(project: dict, payload: dict, mapping: dict[str,
             sample = raw_samples.get(source)
             values = sample.get("sample_values", []) if sample else []
             if values:
-                project[target] = values[0]
+                project[target] = _coerce_field_value(target, values[0])
         return
 
     for target, source in (mapping or {}).items():
@@ -1118,7 +1401,7 @@ def apply_project_field_mapping(project: dict, payload: dict, mapping: dict[str,
                 values = sample.get("sample_values", [])
                 value = values[0] if values else ""
         if value:
-            project[target] = value
+            project[target] = _coerce_field_value(target, value)
 
 
 def _default_source_for_target(target: str) -> tuple[str, float]:
@@ -1296,17 +1579,29 @@ def extract_page_payload(html: str, url: str) -> dict[str, Any]:
 
 
 def normalize_programme(raw: str) -> str:
+    """Return the principal programme (singleSelect) from a raw string."""
     if not raw:
-        return "Autre"
-    # Multiple programmes = Mixte
-    if re.search(r"[,/]", raw):
-        return "Mixte"
-    lower = raw.lower()
-    folded = _ascii_fold(raw)
-    for k, v in PROGRAMME_MAP.items():
-        if k in lower or _ascii_fold(k) in folded:
-            return v
-    return raw.strip().capitalize() or "Autre"
+        return ""
+    raw = raw.strip()
+    if raw in PROGRAMME_VALUES:
+        return raw
+    folded = _ascii_fold(raw.lower())
+    for keyword, principal in PROGRAMME_KEYWORD_MAP:
+        if _ascii_fold(keyword) in folded:
+            return principal
+    return ""
+
+
+def normalize_programme_detail(texts: list[str]) -> list[str]:
+    """Return detail programme values (multipleSelects) from a list of raw texts."""
+    combined = _ascii_fold(" ".join(t.lower() for t in texts if t))
+    found: list[str] = []
+    seen: set[str] = set()
+    for keyword, detail in PROGRAMME_DETAIL_KEYWORD_MAP:
+        if _ascii_fold(keyword) in combined and detail not in seen:
+            seen.add(detail)
+            found.append(detail)
+    return found
 
 
 def normalize_statut(raw: str) -> str:
@@ -1471,9 +1766,31 @@ def project_confidence(project: dict) -> dict[str, Any]:
 
 def finalize_project(project: dict, text: str, meta: dict[str, str] | None = None) -> dict:
     meta = meta or {}
-    project["programme"] = normalize_programme(project.get("programme", ""))
-    if project["programme"] not in PROGRAMME_VALUES:
-        project["programme"] = "Autre"
+
+    # --- Programme principal (singleSelect) ---
+    programme_raw = project.get("programme", "")
+    if isinstance(programme_raw, list):
+        programme_raw = " ".join(str(v) for v in programme_raw)
+    principal = normalize_programme(programme_raw)
+    if not principal:
+        principal = "Mixte"
+    project["programme"] = principal
+
+    # --- Programme détail (multipleSelects) ---
+    # Collect all text sources for detail inference
+    detail_raw = project.get("programme_detail", [])
+    if isinstance(detail_raw, str):
+        detail_raw = [detail_raw]
+    elif not isinstance(detail_raw, list):
+        detail_raw = []
+    detail_sources = [programme_raw] + list(detail_raw) + [text[:1500]]
+    details = normalize_programme_detail(detail_sources)
+    # Keep only details that belong to the detected principal (or all if Mixte)
+    if principal != "Mixte":
+        allowed = set(PROGRAMME_TAXONOMY.get(principal, []))
+        details = [d for d in details if d in allowed]
+    project["programme_detail"] = details
+
     project["statut"] = normalize_statut(project.get("statut", ""))
     if not project.get("lieu"):
         project["lieu"] = infer_location(
@@ -1688,22 +2005,23 @@ def parse_project_text(
             desc = candidates[0][:200]
 
     return {
-        "agence":         agency,
-        "projet":         projet,
-        "maitre_ouvrage": maitre_ouvrage,
-        "mission":        mission,
-        "programme":      normalize_programme(programme_raw),
-        "statut":         statut,
-        "surface_m2":     surface_m2,
-        "lieu":           lieu,
-        "annee":          annee,
-        "montant_ht":     montant_ht,
-        "labels":         labels_combined,
-        "bet_equipe":     equipe,
-        "rehab_neuf":     rehab_neuf,
-        "description":    desc,
-        "image_url":      image_url,
-        "url_fiche":      url,
+        "agence":           agency,
+        "projet":           projet,
+        "maitre_ouvrage":   maitre_ouvrage,
+        "mission":          mission,
+        "programme":        programme_raw,   # raw — normalized by finalize_project
+        "programme_detail": [],              # populated by finalize_project
+        "statut":           statut,
+        "surface_m2":       surface_m2,
+        "lieu":             lieu,
+        "annee":            annee,
+        "montant_ht":       montant_ht,
+        "labels":           labels_combined,
+        "bet_equipe":       equipe,
+        "rehab_neuf":       rehab_neuf,
+        "description":      desc,
+        "image_url":        image_url,
+        "url_fiche":        url,
         # frontend-only
         "_selected":      True,
         "_is_update":     False,
@@ -1771,20 +2089,21 @@ def parse_project_text(
         desc = " ".join(sentences[:2])[:200]
 
     return {
-        "agence":         agency,
-        "projet":         projet,
-        "maitre_ouvrage": maitre_ouvrage,
-        "programme":      normalize_programme(programme_raw),
-        "statut":         statut,
-        "surface_m2":     surface_m2,
-        "lieu":           lieu,
-        "annee":          annee,
-        "montant_ht":     montant_ht,
-        "labels":         labels_combined,
-        "bet_equipe":     equipe,
-        "description":    desc,
-        "image_url":      image_url,
-        "url_fiche":      url,
+        "agence":           agency,
+        "projet":           projet,
+        "maitre_ouvrage":   maitre_ouvrage,
+        "programme":        programme_raw,   # raw — normalized by finalize_project
+        "programme_detail": [],              # populated by finalize_project
+        "statut":           statut,
+        "surface_m2":       surface_m2,
+        "lieu":             lieu,
+        "annee":            annee,
+        "montant_ht":       montant_ht,
+        "labels":           labels_combined,
+        "bet_equipe":       equipe,
+        "description":      desc,
+        "image_url":        image_url,
+        "url_fiche":        url,
         # frontend-only
         "_selected":      True,
         "_is_update":     False,
